@@ -13,7 +13,6 @@ git=0
 # store full command for scheduling
 command=$@
 
-# stolen code to parse arguments
 while [[ $# -gt 0 ]]; do
 	case $1 in
 		# argument to specify backup location
@@ -25,7 +24,8 @@ while [[ $# -gt 0 ]]; do
 		# argument to schedule daily backup
 		-s|--schedule)
 			crontab -l > tempcron
-			echo "@daily backup ${command//-s/}" >> tempcron
+			#     * * * * * for every minute
+			echo "@hourly backup ${command//-s/}" >> tempcron
 			crontab tempcron
 			rm tempcron
 			shift # past argument
@@ -40,14 +40,7 @@ while [[ $# -gt 0 ]]; do
 			shift
 		;;
 		-h|--help)
-			echo "Usage: backup [<args>] [target folder]
-			
-			args:
-				-d|--destination	specify the backup destination, default is $destination
-				-s|--schedule		schedule daily backup 
-				-g|--git		commit changes to git after backing up
-				-l|--list		lists scheduled backups
-			"
+			cat ~/Documents/Readme.txt
 			shift
 		;;
 		# unkown arguments handling
@@ -57,30 +50,45 @@ while [[ $# -gt 0 ]]; do
 		;;
 		# backup the files
 		*)
+			# set target directory and destination directory
 			target="$1"
 			destination=$destination/$target
-			mkdir $destination
-			ls -lr $target > $destination/new_state.txt
+			
+			# create directory for the target's backups if it doesnt exist
+			output=$(mkdir $destination)
+			
+			
+			# create old_state if it doesnt exist
 			>> $destination/old_state.txt
+
+			# check for changes since last time
+			ls -lr $target > $destination/new_state.txt			
 			diff $destination/old_state.txt $destination/new_state.txt			
 			if [ $? -ne 0 ]; then
 
+				# count files and limit to the last 5 backups
 				files_count=$(ls $destination | wc -l)
-				echo $files_count
-				
 				while [ $files_count -ge 7 ]; do
 					echo hereeeee
 					rm -r -- $destination/"$(ls -rt $destination | head -n 1)"
 					((files_count--))
 				done
 				
+				# create folder for this specific backup with the date
 				time=$(date +'%y-%m-%d-%M-%S')
-				output=$(mkdir $destination/$time)
+				mkdir $destination/$time
+				
+				# copy the target to the destination
 				cp -r $target $destination/$time
 				echo "$target backed up successfully at $destination"
+				
+				# save state
 				cat $destination/new_state.txt > $destination/old_state.txt
 
+				# add to git if required
 				if [ $git -eq 1 ]; then
+				
+					# initiate git if first backup
 					if [ ! $output ]; then
 						git -C $destination init
 					fi
