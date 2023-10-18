@@ -1,0 +1,99 @@
+if [ "$#" -le 0 ]
+then	
+	echo "u need to specify which folder to backup"
+	exit 1
+fi
+
+# default backup destination
+destination="/home/tofi/Documents/Backups"
+
+# default git state to not commit
+git=0
+
+# store full command for scheduling
+command=$@
+
+# stolen code to parse arguments
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		# argument to specify backup location
+		-d|--destination)
+			destination="$2"
+			shift # past argument
+			shift # past value
+		;;
+		# argument to schedule daily backup
+		-s|--schedule)
+			crontab -l > tempcron
+			echo "@daily backup ${command//-s/}" >> tempcron
+			crontab tempcron
+			rm tempcron
+			shift # past argument
+		;;
+		# argument to commit the backup to git
+		-g|--git)
+			git=1
+			shift
+		;;
+		-l|--list)
+			echo $( crontab -l)
+			shift
+		;;
+		-h|--help)
+			echo "Usage: backup [<args>] [target folder]
+			
+			args:
+				-d|--destination	specify the backup destination, default is $destination
+				-s|--schedule		schedule daily backup 
+				-g|--git		commit changes to git after backing up
+				-l|--list		lists scheduled backups
+			"
+			shift
+		;;
+		# unkown arguments handling
+		-*|--*)
+			echo "Unknown option $1"
+			exit 1
+		;;
+		# backup the files
+		*)
+			target="$1"
+			destination=$destination/$target
+			mkdir $destination
+			ls -lr $target > $destination/new_state.txt
+			>> $destination/old_state.txt
+			diff $destination/old_state.txt $destination/new_state.txt			
+			if [ $? -ne 0 ]; then
+
+				files_count=$(ls $destination | wc -l)
+				echo $files_count
+				
+				while [ $files_count -ge 7 ]; do
+					echo hereeeee
+					rm -r -- $destination/"$(ls -rt $destination | head -n 1)"
+					((files_count--))
+				done
+				
+				time=$(date +'%y-%m-%d-%M-%S')
+				output=$(mkdir $destination/$time)
+				cp -r $target $destination/$time
+				echo "$target backed up successfully at $destination"
+				cat $destination/new_state.txt > $destination/old_state.txt
+
+				if [ $git -eq 1 ]; then
+					if [ ! $output ]; then
+						git -C $destination init
+					fi
+					git -C $destination add .
+					git -C $destination commit -m $time
+				fi
+				
+			fi
+			shift # past argument
+			exit 0
+		;;
+	esac
+done
+
+exit 0
+
