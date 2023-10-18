@@ -1,0 +1,111 @@
+if [ "$#" -le 0 ]
+then	
+	echo "u need to specify which folder to backup"
+	exit 1
+fi
+
+# default backup destination
+destination="/home/tofi/Documents/Backups"
+
+# default git state to not commit
+git=0
+
+# store full command for scheduling
+command=$@
+
+# stolen code to parse arguments
+while [[ $# -gt 0 ]]; do
+	case $1 in
+		# argument to specify backup location
+		-d|--destination)
+			destination="$2"
+			shift # past argument
+			shift # past value
+		;;
+		# argument to schedule daily backup
+		-s|--schedule)
+			crontab -l > tempcron
+			echo "@hourly backup ${command//-s/}" >> tempcron
+			crontab tempcron
+			rm tempcron
+			shift # past argument
+		;;
+		# argument to commit the backup to git
+		-g|--git)
+			git=1
+			shift
+		;;
+		-l|--list)
+			echo $( crontab -l)
+			shift
+		;;
+		-h|--help)
+			cat ~/Documents/Readme.txt
+			shift
+		;;
+		# unknown arguments handling
+		-*|--*)
+			echo "Unknown option $1"
+			exit 1
+		;;
+		# backup the files
+		*)
+			# set target directory and destination directory
+			target="$1"
+			destination=$destination/$target"_backups"
+			
+			# create directory for the target's backups if it doesn't exist
+			output=$(mkdir "$destination")
+			
+			
+			# create old_state if it doesn't exist
+			>> $destination/old_state.txt
+
+			while :; do
+				# check for changes since last time
+				ls -lr $target > $destination/new_state.txt			
+				diff $destination/old_state.txt $destination/new_state.txt			
+				if [ $? -ne 0 ]; then
+
+					# count files and limit to the last 5 backups
+					files_count=$(ls $destination | wc -l)
+					while [ $files_count -ge 7 ]; do
+						echo hereeeee
+						rm -r -- $destination/"$(ls -rt $destination | head -n 1)"
+						((files_count--))
+					done
+					
+					# create folder for this specific backup with the date
+					time=$(date +'%y-%m-%d-%M-%S')
+					mkdir $destination/$time
+					
+					# copy the target to the destination
+					cp -r $target $destination/$time
+					echo "$target backed up successfully at $destination"
+					
+					# save state
+					cat $destination/new_state.txt > $destination/old_state.txt
+
+					# add to git if required
+					if [ $git -eq 1 ]; then
+					
+						# initiate git if first backup
+						if [ ! $output ]; then
+							git -C $destination init
+						fi
+						git -C $destination add .
+						git -C $destination commit -m $time
+					fi
+					
+				fi
+				sleep 3
+			done
+			
+			shift # past argument
+			exit 0
+		;;
+	esac
+done
+
+exit 0
+
