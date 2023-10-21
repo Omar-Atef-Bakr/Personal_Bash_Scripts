@@ -1,3 +1,7 @@
+#!/bin/bash
+
+loc=$(pwd)
+
 if [ "$#" -le 0 ]
 then	
 	echo "u need to specify which folder to backup"
@@ -15,6 +19,12 @@ command=$@
 
 while [[ $# -gt 0 ]]; do
 	case $1 in
+		# 
+		-p|--pod)
+			cd $2
+			shift
+			shift
+		;;
 		# argument to specify backup location
 		-d|--destination)
 			destination="$2"
@@ -25,7 +35,7 @@ while [[ $# -gt 0 ]]; do
 		-s|--schedule)
 			crontab -l > tempcron
 			#     * * * * * for every minute
-			echo "@hourly backup ${command//-s/}" >> tempcron
+			echo "* * * * * backup -p $loc ${command//-s/}" >> tempcron
 			crontab tempcron
 			rm tempcron
 			shift # past argument
@@ -40,7 +50,7 @@ while [[ $# -gt 0 ]]; do
 			shift
 		;;
 		-h|--help)
-			cat ~/Documents/Readme.txt
+			cat ~/Documents/code/Backup_Bash/Readme.txt
 			shift
 		;;
 		# unkown arguments handling
